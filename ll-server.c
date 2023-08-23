@@ -24,12 +24,14 @@ struct Player
     struct Card hand;
     long unsigned int threadID;
     int turn;
+    int isOut;
 };
 
 extern int total_guesses; // total number of Valid guesses
 extern int total_wins;    // total wins
 extern int total_losses;  // total losses-- these are *every* loss
 
+struct Card* cardMap; // map of cards to their values
 struct Card* deck; // deck of cards
 int deckSize;
 struct Card* discard; // discard pile
@@ -125,6 +127,9 @@ void* clienthandler(void *socket_desc){
         if (turn == 0){
             // do nothing, game has not yet started
         }
+        if (turn == self->turn){
+            //Your turn!
+        }
         *(buffer + 5) = '\0'; //Gotta end the string
         printf("THEAD %lu: rcvd guesses\n", pthread_self());
 
@@ -134,7 +139,6 @@ void* clienthandler(void *socket_desc){
         send(client_socket, packageToSend, 8, 0); //Send the packet
         
         free(packageToSend);
-
         free(buffer);
     }
 
@@ -171,42 +175,46 @@ int letter_server(int argc, char ** argv)
     printf("MAIN: seeded pseudo-random number generator with %d\n", seed);
 
     deck = (struct Card*)calloc(DECK_SIZE, sizeof(struct Card));
+    cardMap = (struct Card*)calloc(10, sizeof(struct Card));
+    cardMap[0].name = "Spy"; //Take that, Goldy! [][][][][][][][][][][]
+    cardMap[1].name = "Guard";
+    cardMap[2].name = "Priest";
+    cardMap[3].name = "Baron";
+    cardMap[4].name = "Handmaid";
+    cardMap[5].name = "Prince";
+    cardMap[6].name = "Chancellor";
+    cardMap[7].name = "King";
+    cardMap[8].name = "Countess";
+    cardMap[9].name = "Princess";
+    for (int i = 0; i <= 9; i++){
+        (cardMap + i)->value = i; //Old habits die hard
+    }
     int counter = 0;
     for (int i = 0; i < 6; i++){
-        (deck + counter)->name = "Guard";
-        (deck + counter)->value = 1;
+        deck[counter] = cardMap[1]; //Guard
         counter++;
     }
     for (int i = 0; i < 2; i++){
-        (deck + counter)->name = "Spy";
-        (deck + counter)->value = 0;
+        deck[counter] = cardMap[0]; //Spy
 
-        (deck + counter+2)->name = "Priest";
-        (deck + counter+2)->value = 2;
+        deck[counter+2] = cardMap[2]; //Priest
 
-        (deck + counter+4)->name = "Baron";
-        (deck + counter+4)->value = 3;
+        deck[counter+4] = cardMap[3]; //Baron
 
-        (deck + counter+6)->name = "Handmaid";
-        (deck + counter+6)->value = 4;
+        deck[counter+6] = cardMap[4]; //Handmaid
 
-        (deck + counter+8)->name = "Prince";
-        (deck + counter+8)->value = 5;
+        deck[counter+8] = cardMap[5]; //Prince
 
-        (deck + counter+10)->name = "Chancellor";
-        (deck + counter+10)->value = 6;
+        deck[counter+10] = cardMap[6]; //Chancellor
         counter++;
     }
-    (deck + counter+18)->name = "King";
-    (deck + counter+18)->value = 7;
-    (deck + counter+19)->name = "Countess";
-    (deck + counter+19)->value = 8;
-    (deck + counter+20)->name = "Princess";
-    (deck + counter+20)->value = 9;
+    //At the end of these loops, counter == 8
+    deck[counter+10] = cardMap[7]; //King
+    deck[counter+11] = cardMap[8]; //Countess
+    deck[counter+12] = cardMap[9]; //Princess
     shuffleDeck(deck, DECK_SIZE);
 
     printf("MAIN: Server listening on port {%d}\n", port); 
-
 
     // make socket, check if it worked.
 
@@ -265,6 +273,7 @@ int letter_server(int argc, char ** argv)
             aside = *(deck + deckSize - 1);
             deckSize--;
             deck = (struct Card*)realloc(deck, sizeof(struct Card) * deckSize);
+            turn = 1;
             close(client_sock);
             continue;
         }
@@ -277,6 +286,7 @@ int letter_server(int argc, char ** argv)
         (players + numTids)->threadID = id;
         (players + numTids)->turn = numTids + 1;
         (players + numTids)->hand = *(deck + deckSize - 1); //Give the player a card
+        (players + numTids)->isOut = 0;
         deckSize--;
         deck = (struct Card*)realloc(deck, sizeof(struct Card) * deckSize);
         *(tids + numTids) = id;
