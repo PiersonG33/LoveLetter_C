@@ -98,6 +98,34 @@ void sigusr1_handler(int signum)
     //Terminate child threads, free dynamic memory, etc
 }
 
+int getNextTurn(int currentTurn){
+    int nextTurn = currentTurn + 1;
+    if (nextTurn > numPlayers){
+        nextTurn = 1;
+    }
+    if ((players + nextTurn - 1)->isOut == 1){
+        nextTurn = getNextTurn(nextTurn);
+    }
+    return nextTurn;
+}
+
+struct Card drawCard(){
+    pthread_mutex_lock(&mutex1);
+    if (deckSize == 0){
+        // Return indicator card
+        struct Card card;
+        card.name = "Empty";
+        card.value = -1;
+        pthread_mutex_unlock(&mutex1);
+        return card;
+    }
+    struct Card card = *(deck + deckSize - 1);
+    deckSize--;
+    deck = (struct Card*)realloc(deck, sizeof(struct Card) * deckSize);
+    pthread_mutex_unlock(&mutex1);
+    return card;
+}
+
 
 void* clienthandler(void *socket_desc){
 
