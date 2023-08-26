@@ -155,8 +155,31 @@ void* clienthandler(void *socket_desc){
         if (turn == 0){
             // do nothing, game has not yet started
         }
+        if (turn == -1){
+            //Room for game over I guess
+        }
         if (turn == self->turn){
             //Your turn!
+
+            //draw card
+            struct Card drawn = drawCard();
+
+            //prepare package to send to client to ask which to keep
+            //first byte is char referring to the mode
+            //second byte is char of int, corresponding to value of card in hand
+            //third byte is same but for card drawn
+            //next 2 bytes is unsigned short of remaining cards
+            char* pack = (char*)calloc(8, sizeof(char));
+            pack[0] = '0';
+            pack[1] = self->hand.value + '0'; //converts to char
+            pack[2] = drawn.value + '0';
+            unsigned int remainingCards = (unsigned int)deckSize;
+            pack[3] = (remainingCards >> 8) & 0xFF;
+            pack[4] = remainingCards & 0xFF; // :)
+
+            send(client_socket, pack, 8, 0);
+            free(pack);
+
         }
         *(buffer + 5) = '\0'; //Gotta end the string
         printf("THEAD %lu: rcvd guesses\n", pthread_self());
