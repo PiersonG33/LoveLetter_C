@@ -13,6 +13,7 @@
 #include <ctype.h>
 #include <signal.h>
 #include <errno.h>
+#include <stdbool.h>
 #define DECK_SIZE 21
 struct Card
 {
@@ -24,7 +25,8 @@ struct Player
     struct Card hand;
     long unsigned int threadID;
     int turn;
-    int isOut;
+    bool isOut;
+    bool isProt; //is protected? Used for the Handmaid card
 };
 
 extern int total_guesses; // total number of Valid guesses
@@ -126,6 +128,14 @@ struct Card drawCard(){
     return card;
 }
 
+void discardCard(struct Card discarded){
+    pthread_mutex_lock(&mutex2);
+    discardSize++;
+    discard = (struct Card*)realloc(discard, sizeof(struct Card) * discardSize);
+    discard[discardSize-1] = discarded;
+    pthread_mutex_lock(&mutex2);
+}
+
 
 void* clienthandler(void *socket_desc){
 
@@ -144,8 +154,11 @@ void* clienthandler(void *socket_desc){
 
     while(1){//Client control loop
 
-        char* buffer = (char*)calloc(6, sizeof(char));
-        ssize_t bytesIn = recv(client_socket, buffer, 5, 0);
+        char* buffer = (char*)calloc(9, sizeof(char));
+        ssize_t bytesIn;
+        if (1){ // Would I even want to receive if it is not their turn? Questions
+            bytesIn = recv(client_socket, buffer, 8, 0);
+        }
         if (bytesIn <= 0){
             //Client disconnected
             printf("THREAD %lu: client gave up; closing TCP connection...\n", pthread_self());
@@ -160,6 +173,7 @@ void* clienthandler(void *socket_desc){
         }
         if (turn == self->turn){
             //Your turn!
+            self->isProt = false;
 
             //draw card
             struct Card drawn = drawCard();
@@ -180,6 +194,20 @@ void* clienthandler(void *socket_desc){
             send(client_socket, pack, 8, 0);
             free(pack);
 
+            bytesIn = recv(client_socket, buffer, 8, 0);
+            // first byte is deciding which card to play
+            // remaining bytes are information regarding the play
+            int played = -1;
+            if (buffer[0] == 'h'){
+                // played card in hand
+                played = self->hand.value;
+                discardCard(self->hand);
+            }
+            else if (buffer == 'd'){
+                //played card drawn
+                played = drawn.value;
+                discardCard(drawn);
+            }
         }
         *(buffer + 5) = '\0'; //Gotta end the string
         printf("THEAD %lu: rcvd guesses\n", pthread_self());
@@ -202,9 +230,9 @@ int letter_server(int argc, char ** argv)
     //This program is designd to simulate a game of Love Letter
 
     setvbuf( stdout, NULL, _IONBF, 0 );
-    if (argc != 5)
+    if (argc != 4)
     {
-        printf("ERROR: Invalid argument(s)\nUSAGE: hw3.out <listener-port> <seed> <number of players>\n"); 
+        printf("ERROR: Invalid argument(s)\nUSAGE: ll-server.out <listener-port> <seed> <number of players>\n"); 
         return EXIT_FAILURE; 
     }
 
@@ -337,12 +365,12 @@ int letter_server(int argc, char ** argv)
         (players + numTids)->threadID = id;
         (players + numTids)->turn = numTids + 1;
         (players + numTids)->hand = *(deck + deckSize - 1); //Give the player a card
-        (players + numTids)->isOut = 0;
+        (players + numTids)->isOut = false;
+        (players + numTids)->isProt = false;
         deckSize--;
         deck = (struct Card*)realloc(deck, sizeof(struct Card) * deckSize);
         *(tids + numTids) = id;
         numTids++;
-        //tids = (pthread_t*)realloc(tids, sizeof(pthread_t) * (numTids + 1));
         //Array now holds all the ids, although realloc every time is probably not the best way to do this
         pthread_detach(id); //Detach the thread so it can be joined later (never)
 
